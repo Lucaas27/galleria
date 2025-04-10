@@ -1,0 +1,7 @@
+services:
+  galleria:
+    container_name: galleria
+    image: ghcr.io/lucaas27/galleria:latest
+    build:
+      context: .
+      dockerfile: ./Dockerfile
