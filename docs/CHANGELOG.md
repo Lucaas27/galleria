@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.2](https://github.com/Lucaas27/galleria/compare/v0.1.1...v0.1.2) (2025-04-11)
+
+### Bug Fixes
+
+* update platform specifications for Docker setup and rename CI workflow ([30b2590](https://github.com/Lucaas27/galleria/commit/30b25909e315739bf433d1f1bad0b07c974fac3f))
+
 ## [0.1.1](https://github.com/Lucaas27/galleria/compare/v0.1.0...v0.1.1) (2025-04-11)
 
 ### Bug Fixes
