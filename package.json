@@ -11,7 +11,7 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "dev": "next dev --turbo",
-    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,mdx}\" --cache",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,mdx}\" --cache --log-level warn",
     "format:write": "prettier --write \"**/*.{ts,tsx,js,jsx,mdx}\" --cache",
     "lint": "next lint",
     "lint:fix": "next lint --fix",
@@ -22,11 +22,11 @@
   },
   "lint-staged": {
     "*.{js,jsx,ts,tsx,mdx}": [
-      "prettier --check --ignore-path .prettierignore",
-      "eslint --quiet --ignore-path .eslintignore"
+      "prettier --write --cache",
+      "eslint --fix"
     ],
     "*.{css,scss}": [
-      "prettier --check --ignore-path .prettierignore"
+      "prettier --write --cache"
     ]
   },
   "dependencies": {
@@ -42,6 +42,7 @@
     "@commitlint/cli": "^19.8.0",
     "@commitlint/config-conventional": "^19.8.0",
     "@eslint/eslintrc": "^3.3.1",
+    "@eslint/js": "^9.24.0",
     "@semantic-release/changelog": "^6.0.3",
     "@semantic-release/commit-analyzer": "^13.0.1",
     "@semantic-release/git": "^10.0.1",
@@ -52,9 +53,12 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "drizzle-kit": "^0.30.5",
-    "eslint": "^9.23.0",
+    "eslint": "^9.24.0",
     "eslint-config-next": "^15.2.3",
+    "eslint-config-prettier": "^10.1.2",
     "eslint-plugin-drizzle": "^0.2.3",
+    "eslint-plugin-react": "^7.37.5",
+    "globals": "^16.0.0",
     "husky": "^9.1.7",
     "lint-staged": "^15.5.0",
     "postcss": "^8.5.3",
@@ -62,7 +66,7 @@
     "prettier-plugin-tailwindcss": "^0.6.11",
     "tailwindcss": "^4.0.15",
     "typescript": "^5.8.2",
-    "typescript-eslint": "^8.27.0"
+    "typescript-eslint": "^8.29.1"
   },
   "ct3aMetadata": {
     "initVersion": "7.39.3"
