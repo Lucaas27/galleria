@@ -4,7 +4,7 @@
 
 - [x] Initial deployment
 - [x] Scaffold basic UI with mock data
-- [ ] Set up a database
+- [x] Set up a database
 - [ ] Add Authentication (clerk)
 - [ ] Add image upload
 - [ ] Error management (Sentry)
