@@ -36,7 +36,7 @@ const TopNav = () => (
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={`${geist.variable}`}>
-      <body className="bg-radial-gradient flex h-screen flex-col">
+      <body className="bg-radial-gradient flex min-h-screen flex-col">
         <header>
           <TopNav />
         </header>
