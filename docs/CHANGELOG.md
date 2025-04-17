@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.3](https://github.com/Lucaas27/galleria/compare/v0.1.2...v0.1.3) (2025-04-17)
+
+### Bug Fixes
+
+* remove SKIP_ENV_VALIDATION environment variable and update README for initial deployment ([38213b8](https://github.com/Lucaas27/galleria/commit/38213b838f202b10ef2384953b2221948aa9e30f))
+
 ## [0.1.2](https://github.com/Lucaas27/galleria/compare/v0.1.1...v0.1.2) (2025-04-11)
 
 ### Bug Fixes
