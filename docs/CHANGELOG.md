@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.0](https://github.com/Lucaas27/galleria/compare/v0.2.0...v0.3.0) (2025-04-17)
+
+### Features
+
+* add database setup ([#2](https://github.com/Lucaas27/galleria/issues/2)) ([eca302e](https://github.com/Lucaas27/galleria/commit/eca302e6887ad1e600c8b9e4351fec0149d087c0))
+* enhance TopNav layout and add footer to RootLayout ([a57de72](https://github.com/Lucaas27/galleria/commit/a57de72e329db02342824363a12c35c5c062f6a2))
+* setup database connection ([bcf25b4](https://github.com/Lucaas27/galleria/commit/bcf25b457c6e2145a4c50aa4479c5b21e55926a5))
+
 ## [0.2.0](https://github.com/Lucaas27/galleria/compare/v0.1.4...v0.2.0) (2025-04-17)
 
 ### Features
