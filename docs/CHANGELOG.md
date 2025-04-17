@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.2.0](https://github.com/Lucaas27/galleria/compare/v0.1.4...v0.2.0) (2025-04-17)
+
+### Features
+
+* implement basic ui with top nav ([f4486e2](https://github.com/Lucaas27/galleria/commit/f4486e2ad0f9c562da6e5d798ac2f3e253d55b63))
+* implement basic ui with top nav ([#1](https://github.com/Lucaas27/galleria/issues/1)) ([298cf17](https://github.com/Lucaas27/galleria/commit/298cf17770934e00d630ff631b6363b060a3f921))
+
+### Bug Fixes
+
+* add placeholder test script in package.json ([ca01377](https://github.com/Lucaas27/galleria/commit/ca01377fa9cca1a0cfb776f8ca15bab92c59b8c4))
+* add SKIP_ENV_VALIDATION var to the ci workflow ([5411e0b](https://github.com/Lucaas27/galleria/commit/5411e0bcfce19bee2c6b14d9122269bab54f58cc))
+* correct path for CodeQL config file in CI workflow ([829c5f3](https://github.com/Lucaas27/galleria/commit/829c5f31110b41cf803b7df9c7523cfb0e363e34))
+* update permissions to CI workflow ([2ca99d8](https://github.com/Lucaas27/galleria/commit/2ca99d8b20bb468ff91ddd9fa7181847a355d48a))
+
 ## [0.1.4](https://github.com/Lucaas27/galleria/compare/v0.1.3...v0.1.4) (2025-04-17)
 
 ### Bug Fixes
