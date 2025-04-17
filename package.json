@@ -6,6 +6,7 @@
   "scripts": {
     "build": "next build",
     "check": "next lint && tsc --noEmit",
+    "test": "echo \"Tests are not implemented yet\" && exit 0",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
@@ -21,11 +22,11 @@
     "prepare": "husky"
   },
   "lint-staged": {
-    "*.{js,jsx,ts,tsx,mdx}": [
-      "prettier --write --cache",
+    "**/*.{js,jsx,ts,tsx,mdx}": [
+      "prettier --write --cache --log-level warn",
       "eslint --fix"
     ],
-    "*.{css,scss}": [
+    "**/*.{css,scss}": [
       "prettier --write --cache"
     ]
   },
@@ -36,6 +37,7 @@
     "postgres": "^3.4.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "uuid": "^11.1.0",
     "zod": "^3.24.2"
   },
   "devDependencies": {

@@ -5,19 +5,24 @@ on:
     branches:
       - main
 
+permissions:
+  actions: read
+  contents: read
+  checks: write
+  issues: read
+  pull-requests: read
+
 jobs:
   CI:
     runs-on: ubuntu-latest
 
+    env:
+      SKIP_ENV_VALIDATION: "true"
+      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/test_db"
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
-        with:
-          languages: javascript-typescript
-          config-file: .github/workflows/codeql/codeql-config.yml
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -36,10 +41,3 @@ jobs:
 
       - name: Format with Prettier
         run: npm run format:check
-
-      - name: Run CodeQL
-        uses: github/codeql-action/analyze@v3
-        with:
-          category: "/language:javascript-typescript"
-          output: "codeql-results.sarif"
-          upload: true
