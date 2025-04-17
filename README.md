@@ -3,7 +3,7 @@
 ## TODO
 
 - [x] Initial deployment
-- [ ] Scaffold basic UI with mock data
+- [x] Scaffold basic UI with mock data
 - [ ] Set up a database
 - [ ] Add Authentication (clerk)
 - [ ] Add image upload
