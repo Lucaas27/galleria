@@ -10,7 +10,7 @@ const mockData = [
 export default function HomePage() {
   return (
     <div className="flex flex-wrap gap-4">
-      {[...mockData, ...mockData, ...mockData].map(image => (
+      {[...mockData, ...mockData, ...mockData, ...mockData, ...mockData, ...mockData, ...mockData].map(image => (
         <div key={uuidv4()} className="w-48">
           <img src={image} alt={`Image ${image}`} />
         </div>

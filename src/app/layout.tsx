@@ -15,18 +15,20 @@ const geist = Geist({
 });
 
 const TopNav = () => (
-  <nav className="flex items-center justify-between border-b p-4 text-white shadow-md">
-    <div className="text-xl font-bold">Galleria</div>
-    <div className="flex space-x-4">
-      <a href="#" className="text-gray-400 hover:text-gray-700">
-        Home
-      </a>
-      <a href="#" className="text-gray-400 hover:text-gray-700">
-        About
-      </a>
-      <a href="#" className="text-gray-400 hover:text-gray-700">
-        Sign In
-      </a>
+  <nav className="border-b border-white/10 p-4 shadow-md">
+    <div className="container mx-auto flex items-center justify-between text-white">
+      <div className="text-xl font-bold">Galleria</div>
+      <div className="flex space-x-4">
+        <a href="#" className="text-gray-300 hover:text-gray-300/50">
+          Home
+        </a>
+        <a href="#" className="text-gray-300 hover:text-gray-300/50">
+          About
+        </a>
+        <a href="#" className="text-gray-300 hover:text-gray-300/50">
+          Sign In
+        </a>
+      </div>
     </div>
   </nav>
 );
@@ -34,9 +36,14 @@ const TopNav = () => (
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={`${geist.variable}`}>
-      <body className="bg-radial-gradient">
-        <TopNav />
-        <main className="container mx-auto h-screen px-4 py-8">{children}</main>
+      <body className="bg-radial-gradient flex h-screen flex-col">
+        <header>
+          <TopNav />
+        </header>
+        <main className="container mx-auto flex-1 px-4 py-8">{children}</main>
+        <footer className="border-t border-white/10 p-4 text-center text-gray-300">
+          <p>&copy; {new Date().getFullYear()} Galleria. All rights reserved.</p>
+        </footer>
       </body>
     </html>
   );
