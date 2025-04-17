@@ -22,11 +22,11 @@
     "prepare": "husky"
   },
   "lint-staged": {
-    "*.{js,jsx,ts,tsx,mdx}": [
-      "prettier --write --cache",
+    "**/*.{js,jsx,ts,tsx,mdx}": [
+      "prettier --write --cache --log-level warn",
       "eslint --fix"
     ],
-    "*.{css,scss}": [
+    "**/*.{css,scss}": [
       "prettier --write --cache"
     ]
   },
