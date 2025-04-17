@@ -1,4 +1,6 @@
 import { FlatCompat } from "@eslint/eslintrc";
+// @ts-ignore -- no types available for this plugin
+import pluginNext from "@next/eslint-plugin-next";
 import tseslint from "typescript-eslint";
 // @ts-ignore -- no types for this plugin
 import drizzle from "eslint-plugin-drizzle";
@@ -15,6 +17,7 @@ export default tseslint.config(
   {
     files: ["**/*.ts", "**/*.tsx"],
     plugins: {
+      next: pluginNext,
       drizzle,
     },
     extends: [
