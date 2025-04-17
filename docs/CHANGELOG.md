@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.4](https://github.com/Lucaas27/galleria/compare/v0.1.3...v0.1.4) (2025-04-17)
+
+### Bug Fixes
+
+* re-add SKIP_ENV_VALIDATION environment variable in Dockerfile ([9188db3](https://github.com/Lucaas27/galleria/commit/9188db3ccfc6079e0cffc096664b1baaf693730f))
+
 ## [0.1.3](https://github.com/Lucaas27/galleria/compare/v0.1.2...v0.1.3) (2025-04-17)
 
 ### Bug Fixes
