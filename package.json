@@ -23,11 +23,11 @@
   },
   "lint-staged": {
     "**/*.{js,jsx,ts,tsx,mdx}": [
-      "prettier --write --cache --log-level warn",
-      "eslint --fix"
+      "prettier --check \"**/*.{ts,tsx,js,jsx,mdx}\" --cache --log-level warn",
+      "eslint"
     ],
     "**/*.{css,scss}": [
-      "prettier --write --cache"
+      "prettier --check --cache"
     ]
   },
   "dependencies": {
@@ -36,7 +36,6 @@
     "drizzle-orm": "^0.41.0",
     "next": "^15.2.3",
     "pg": "^8.14.1",
-    "postgres": "^3.4.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "uuid": "^11.1.0",
@@ -57,7 +56,7 @@
     "@types/pg": "^8.11.13",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "drizzle-kit": "^0.30.5",
+    "drizzle-kit": "^0.31.0",
     "eslint": "^9.24.0",
     "eslint-config-next": "^15.2.3",
     "eslint-config-prettier": "^10.1.2",
