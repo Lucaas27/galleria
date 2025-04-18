@@ -1,5 +1,4 @@
 import db from "@/server/db";
-import { v4 as uuidv4 } from "uuid";
 
 export const dynamic = "force-dynamic";
 
@@ -10,8 +9,9 @@ export default async function HomePage() {
 
   return (
     <div className="flex flex-wrap gap-4">
-      {[...images, ...images, ...images, ...images, ...images].map(image => (
-        <div key={uuidv4()} className="flex w-48 flex-col gap-2 transition-transform hover:scale-105">
+      {/* This is a hack to make the images repeat during development*/}
+      {[...images, ...images, ...images, ...images, ...images].map((image, index) => (
+        <div key={image.id + index} className="flex w-48 flex-col gap-2 transition-transform hover:scale-105">
           <img src={image.url} alt={`Image ${image.name}`} />
           <p>{image.name}</p>
         </div>
