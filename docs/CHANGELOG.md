@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.5.0](https://github.com/Lucaas27/galleria/compare/v0.4.0...v0.5.0) (2025-04-18)
+
+### Features
+
+* update image schema and implement connection to the UI ([ce20772](https://github.com/Lucaas27/galleria/commit/ce207721a7b5fa341143876d56232ebb465f2b63))
+* update image schema and implement connection to the UI ([#4](https://github.com/Lucaas27/galleria/issues/4)) ([65a79a2](https://github.com/Lucaas27/galleria/commit/65a79a2ada97dfbe1e04da9c28c9cfe514e9c9ed))
+
+### Bug Fixes
+
+* replace uuid with image.id as key in HomePage component ([debb25d](https://github.com/Lucaas27/galleria/commit/debb25d64a35a2faabafe14b89c46f16d65112d6))
+
 ## [0.4.0](https://github.com/Lucaas27/galleria/compare/v0.3.0...v0.4.0) (2025-04-18)
 
 ### Features
