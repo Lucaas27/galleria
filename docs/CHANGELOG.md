@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/Lucaas27/galleria/compare/v0.3.0...v0.4.0) (2025-04-18)
+
+### Features
+
+* implement db migrations as part of the CD pipeline ([0afc990](https://github.com/Lucaas27/galleria/commit/0afc990593abd478db6b5aed226b1cf85928f8c8))
+* implement db migrations as part of the CD pipeline ([#3](https://github.com/Lucaas27/galleria/issues/3)) ([16e3548](https://github.com/Lucaas27/galleria/commit/16e354892ffbae2242d98eae353e2ae3878dc0e8))
+
 ## [0.3.0](https://github.com/Lucaas27/galleria/compare/v0.2.0...v0.3.0) (2025-04-17)
 
 ### Features
