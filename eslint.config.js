@@ -1,30 +1,25 @@
 import { FlatCompat } from "@eslint/eslintrc";
-// @ts-ignore -- no types available for this plugin
-import pluginNext from "@next/eslint-plugin-next";
 import tseslint from "typescript-eslint";
-// @ts-ignore -- no types for this plugin
-import drizzle from "eslint-plugin-drizzle";
 
 const compat = new FlatCompat({
   baseDirectory: import.meta.dirname,
 });
 
+// Use FlatCompat to convert the Next.js eslintrc-style config to flat config
+const nextConfig = compat.config({
+  extends: ["next/core-web-vitals"],
+});
+
 export default tseslint.config(
+  // Extract the rules from the Next.js config
+  ...nextConfig,
+  ...tseslint.configs.recommended,
+  ...tseslint.configs.recommendedTypeChecked,
+  ...tseslint.configs.stylisticTypeChecked,
+  ...compat.extends("plugin:drizzle/recommended"),
   {
-    ignores: [".next", "*.config*"],
-  },
-  ...compat.extends("next/core-web-vitals"),
-  {
-    files: ["**/*.ts", "**/*.tsx"],
-    plugins: {
-      next: pluginNext,
-      drizzle,
-    },
-    extends: [
-      ...tseslint.configs.recommended,
-      ...tseslint.configs.recommendedTypeChecked,
-      ...tseslint.configs.stylisticTypeChecked,
-    ],
+    files: ["**/*.{ts, js, tsx, jsx}"],
+    ignores: [".next", "node_modules", "dist", "build"],
     rules: {
       "@typescript-eslint/array-type": "off",
       "@typescript-eslint/consistent-type-definitions": "off",
@@ -37,12 +32,6 @@ export default tseslint.config(
       "@typescript-eslint/no-misused-promises": ["error", { checksVoidReturn: { attributes: false } }],
       "drizzle/enforce-delete-with-where": ["error", { drizzleObjectName: ["db", "ctx.db"] }],
       "drizzle/enforce-update-with-where": ["error", { drizzleObjectName: ["db", "ctx.db"] }],
-      "jsx-a11y/alt-text": "warn",
-      "jsx-a11y/aria-props": "warn",
-      "jsx-a11y/aria-proptypes": "warn",
-      "jsx-a11y/aria-unsupported-elements": "warn",
-      "jsx-a11y/role-has-required-aria-props": "warn",
-      "jsx-a11y/role-supports-aria-props": "warn",
     },
   },
   {
@@ -52,6 +41,7 @@ export default tseslint.config(
     languageOptions: {
       parserOptions: {
         projectService: true,
+        tsconfigRootDir: import.meta.dirname,
       },
     },
   },
