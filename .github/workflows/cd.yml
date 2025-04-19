@@ -43,6 +43,39 @@ jobs:
           echo "Error: You must provide a version when skip_build is set to true"
           exit 1
 
+      # Check if image exists but don't fail - just set an output variable
+      - name: Check if image exists
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.skip_build == 'true' }}
+        id: check_image
+        run: |
+          echo "Checking if Docker image version ${{ github.event.inputs.version }} exists in the registry..."
+
+          # Login to GitHub Container Registry
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
+
+          # Check if image exists by trying to pull it
+          if docker pull ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:${{ github.event.inputs.version }} &> /dev/null; then
+            echo "✅ Docker image exists in the registry"
+            echo "image_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️ Docker image with version ${{ github.event.inputs.version }} does not exist in the registry. Will build it."
+            echo "image_exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      # Set need_build flag for later steps
+      - name: Determine if build is needed
+        id: build_needed
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            echo "need_build=true" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event.inputs.skip_build }}" == "false" ]]; then
+            echo "need_build=true" >> $GITHUB_OUTPUT
+          elif [[ "${{ steps.check_image.outputs.image_exists }}" == "false" ]]; then
+            echo "need_build=true" >> $GITHUB_OUTPUT
+          else
+            echo "need_build=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -52,21 +85,81 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Only run semantic release for automated deployments or manual deployments where skip_build=false
+      # Only run semantic release for automated deployments or manual deployments that need build
       - name: Create semantic release
         id: semantic
-        if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.skip_build == 'false') }}
+        if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && steps.build_needed.outputs.need_build == 'true') }}
         uses: cycjimmy/semantic-release-action@v4
         with:
           semantic_version: 24.2.3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Set version for manual deployments that skip build
+      # Set version for manual deployments that skip build and have existing image
       - name: Set manual version
-        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.skip_build == 'true' }}
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.skip_build == 'true' && steps.check_image.outputs.image_exists == 'true' }}
         id: manual_version
         run: echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+
+      # Set version for manual deployments that skip build but need to build (image doesn't exist)
+      - name: Set version for missing image
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.skip_build == 'true' && steps.check_image.outputs.image_exists == 'false' }}
+        id: missing_image_version
+        run: echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+
+      # BUILD DOCKER IMAGE (BEFORE DATABASE MIGRATIONS)
+      # ---------------------------------------------
+
+      # Set up QEMU for multi-arch builds
+      - name: Set up QEMU
+        if: ${{ steps.build_needed.outputs.need_build == 'true' }}
+        uses: docker/setup-qemu-action@v2
+        with:
+          platforms: "linux/amd64,linux/arm64"
+
+      # Set up Docker Buildx
+      - name: Set up Docker Buildx
+        if: ${{ steps.build_needed.outputs.need_build == 'true' }}
+        uses: docker/setup-buildx-action@v3
+
+      # Login to GitHub Container Registry
+      - name: Login to GitHub Container Registry
+        if: ${{ steps.build_needed.outputs.need_build == 'true' }}
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Extract metadata and set tags
+      - name: Extract metadata
+        if: ${{ steps.build_needed.outputs.need_build == 'true' }}
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}
+          tags: |
+            type=raw,value=latest
+            ${{ (github.event_name == 'push' && format('type=raw,value={0}', steps.semantic.outputs.new_release_version)) ||
+               (github.event_name == 'workflow_dispatch' && steps.build_needed.outputs.need_build == 'true' &&
+                steps.check_image.outputs.image_exists == 'false' && format('type=raw,value={0}', github.event.inputs.version)) ||
+               format('type=raw,value={0}', steps.semantic.outputs.new_release_version) }}
+
+      # Build and push the Docker image
+      - name: Build and push Docker image to GCR
+        if: ${{ steps.build_needed.outputs.need_build == 'true' }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          file: ./Dockerfile
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # DATABASE MIGRATIONS (AFTER DOCKER BUILD)
+      # ---------------------------------------
 
       # Combined condition for database migrations
       - name: Generate database migrations
@@ -83,46 +176,8 @@ jobs:
           SKIP_ENV_VALIDATION: "true"
         run: npx drizzle-kit migrate --config=drizzle.config.ts
 
-      # Skip build steps if requested for manual deployments
-      - name: Set up QEMU
-        if: ${{ (github.event_name == 'push' && steps.semantic.outputs.new_release_published == 'true') || (github.event_name == 'workflow_dispatch' && github.event.inputs.skip_build == 'false') }}
-        uses: docker/setup-qemu-action@v2
-        with:
-          platforms: "linux/amd64,linux/arm64"
-
-      - name: Set up Docker Buildx
-        if: ${{ (github.event_name == 'push' && steps.semantic.outputs.new_release_published == 'true') || (github.event_name == 'workflow_dispatch' && github.event.inputs.skip_build == 'false') }}
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to GitHub Container Registry
-        if: ${{ (github.event_name == 'push' && steps.semantic.outputs.new_release_published == 'true') || (github.event_name == 'workflow_dispatch' && github.event.inputs.skip_build == 'false') }}
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata
-        if: ${{ (github.event_name == 'push' && steps.semantic.outputs.new_release_published == 'true') || (github.event_name == 'workflow_dispatch' && github.event.inputs.skip_build == 'false') }}
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}
-          tags: |
-            type=raw,value=latest
-            ${{ github.event_name == 'push' && format('type=raw,value={0}', steps.semantic.outputs.new_release_version) || (github.event_name == 'workflow_dispatch' && github.event.inputs.skip_build == 'false' && format('type=raw,value={0}', steps.semantic.outputs.new_release_version)) }}
-
-      - name: Build and push Docker image to GCR
-        if: ${{ (github.event_name == 'push' && steps.semantic.outputs.new_release_published == 'true') || (github.event_name == 'workflow_dispatch' && github.event.inputs.skip_build == 'false') }}
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          file: ./Dockerfile
-          tags: ${{ steps.meta.outputs.tags }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+      # DEPLOYMENT
+      # ----------
 
       # Version to use for deployment
       - name: Set deployment version
@@ -130,8 +185,10 @@ jobs:
         run: |
           if [[ "${{ github.event_name }}" == "push" ]]; then
             echo "version=${{ steps.semantic.outputs.new_release_version }}" >> $GITHUB_OUTPUT
-          elif [[ "${{ github.event.inputs.skip_build }}" == "true" ]]; then
+          elif [[ "${{ github.event.inputs.skip_build }}" == "true" && "${{ steps.check_image.outputs.image_exists }}" == "true" ]]; then
             echo "version=${{ steps.manual_version.outputs.version }}" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event.inputs.skip_build }}" == "true" && "${{ steps.check_image.outputs.image_exists }}" == "false" ]]; then
+            echo "version=${{ steps.missing_image_version.outputs.version }}" >> $GITHUB_OUTPUT
           else
             echo "version=${{ steps.semantic.outputs.new_release_version }}" >> $GITHUB_OUTPUT
           fi
