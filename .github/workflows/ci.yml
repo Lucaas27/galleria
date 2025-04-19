@@ -13,16 +13,41 @@ permissions:
   pull-requests: read
 
 jobs:
-  CI:
+  setup:
+    name: Setup
     runs-on: ubuntu-latest
-
-    env:
-      SKIP_ENV_VALIDATION: "true"
-      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/test_db"
+    timeout-minutes: 5
+    outputs:
+      node-version: ${{ steps.node-version.outputs.version }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Determine Node.js version
+        id: node-version
+        run: |
+          NODE_VERSION=$(cat .nvmrc)
+          echo "version=$NODE_VERSION" >> $GITHUB_OUTPUT
+          echo "Using Node.js version: $NODE_VERSION"
+
+  install:
+    name: Install Dependencies
+    needs: setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      SKIP_ENV_VALIDATION: "true"
+      NODE_VERSION: ${{ needs.setup.outputs.node-version }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -33,11 +58,157 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run tests
-        run: npm run test
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        id: cache-modules
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-modules-${{ hashFiles('**/package-lock.json') }}
+
+  lint:
+    name: Lint
+    needs: [setup, install]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    env:
+      SKIP_ENV_VALIDATION: "true"
+      NODE_VERSION: ${{ needs.setup.outputs.node-version }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: "npm"
+
+      - name: Restore node_modules
+        uses: actions/cache@v4
+        id: cache-modules
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-modules-${{ hashFiles('**/package-lock.json') }}
+
+      - name: Install dependencies if cache missed
+        if: steps.cache-modules.outputs.cache-hit != 'true'
+        run: npm ci
 
       - name: Run ESLint
         run: npm run lint
 
-      - name: Format with Prettier
+      - name: Verify formatting with Prettier
         run: npm run format:check
+
+  typecheck:
+    name: Type Check
+    needs: [setup, install]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    env:
+      SKIP_ENV_VALIDATION: "true"
+      NODE_VERSION: ${{ needs.setup.outputs.node-version }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: "npm"
+
+      - name: Restore node_modules
+        uses: actions/cache@v4
+        id: cache-modules
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-modules-${{ hashFiles('**/package-lock.json') }}
+
+      - name: Install dependencies if cache missed
+        if: steps.cache-modules.outputs.cache-hit != 'true'
+        run: npm ci
+
+      - name: Run TypeScript type checking
+        run: npm run typecheck
+
+  test:
+    name: Run Tests
+    needs: [setup, install]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      SKIP_ENV_VALIDATION: "true"
+      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/test_db"
+      NODE_VERSION: ${{ needs.setup.outputs.node-version }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: "npm"
+
+      - name: Restore node_modules
+        uses: actions/cache@v4
+        id: cache-modules
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-modules-${{ hashFiles('**/package-lock.json') }}
+
+      - name: Install dependencies if cache missed
+        if: steps.cache-modules.outputs.cache-hit != 'true'
+        run: npm ci
+
+      - name: Run tests
+        run: npm run test
+
+  build:
+    name: Build Application
+    needs: [setup, lint, typecheck, test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      SKIP_ENV_VALIDATION: "true"
+      NODE_VERSION: ${{ needs.setup.outputs.node-version }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: "npm"
+
+      - name: Restore node_modules
+        uses: actions/cache@v4
+        id: cache-modules
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-modules-${{ hashFiles('**/package-lock.json') }}
+
+      - name: Install dependencies if cache missed
+        if: steps.cache-modules.outputs.cache-hit != 'true'
+        run: npm ci
+
+      - name: Build application
+        run: npm run build
