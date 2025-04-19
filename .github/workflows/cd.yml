@@ -1,11 +1,27 @@
-name: Build and Publish Docker Image
+name: Continuous Deployment
+
+# Prevent concurrent deployments
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false # Don't cancel in-progress runs as we want to allow deployments to complete
 
 on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
+      environment:
+        description: "Deployment environment"
+        required: true
+        type: choice
+        options:
+          - production
+          - staging
+        default: "production"
       skip_build:
         description: "Skip build and deploy existing version"
         required: true
@@ -22,48 +38,103 @@ on:
         default: false
 
 jobs:
-  CD:
+  prepare:
+    name: Prepare and Validate
     permissions:
-      contents: write
-      issues: write
-      pull-requests: write
-      packages: write
+      contents: read
+      packages: read
     runs-on: ubuntu-latest
+    timeout-minutes: 10 # Add timeout to prevent hanging jobs
+    outputs:
+      need_build: ${{ steps.build_needed.outputs.need_build }}
+      image_exists: ${{ steps.check_image.outputs.image_exists }}
+      manual_version: ${{ steps.manual_version.outputs.version }}
+      is_org_repo: ${{ steps.repo_owner_type.outputs.is_org }}
+      environment: ${{ steps.set_environment.outputs.environment }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Fetch all history for all tags and branches to ensure semantic release can determine the correct version number
+          fetch-depth: 0 # Fetch all history for all tags and branches
 
-      # Validation step for manual deployments
-      - name: Validate inputs
-        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.skip_build == 'true' && github.event.inputs.version == '' }}
+      # Determine environment to use
+      - name: Set environment
+        id: set_environment
         run: |
-          echo "Error: You must provide a version when skip_build is set to true"
-          exit 1
+          # Default environment based on the event type
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            # PRs always go to staging
+            ENVIRONMENT="staging"
+          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            # Manual trigger uses the specified environment
+            ENVIRONMENT="${{ github.event.inputs.environment }}"
+          else
+            # Push to main goes to production
+            ENVIRONMENT="production"
+          fi
 
-      # Check if image exists but don't fail - just set an output variable
-      - name: Check if image exists
+          echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
+
+      # Determine if repository owner is an organization or user
+      - name: Determine repository owner type
+        id: repo_owner_type
+        run: |
+          # Use GitHub API to check if the owner is an organization
+          RESPONSE=$(curl -s \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/users/${{ github.repository_owner }}")
+
+          IS_ORG=$(echo "$RESPONSE" | grep -q '"type": "Organization"' && echo "true" || echo "false")
+          echo "is_org=$IS_ORG" >> $GITHUB_OUTPUT
+
+      # Combined validation and image check step
+      - name: Validate inputs and check image existence (if skip_build is true)
         if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.skip_build == 'true' }}
         id: check_image
         run: |
-          echo "Checking if Docker image version ${{ github.event.inputs.version }} exists in the registry..."
+          # Validate that version is provided
+          if [[ -z "${{ github.event.inputs.version }}" ]]; then
+            echo "Error: You must provide a version when skip_build is set to true"
+            exit 1
+          fi
 
-          # Login to GitHub Container Registry
-          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
+          # Remove 'v' prefix if accidentally included in the version input
+          VERSION="${{ github.event.inputs.version }}"
+          VERSION="${VERSION#v}"
 
-          # Check if image exists by trying to pull it
-          if docker pull ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:${{ github.event.inputs.version }} &> /dev/null; then
+          echo "Checking if Docker image version $VERSION exists in the registry..."
+
+          # Use GitHub API to check if the image version exists
+          REPO_NAME=$(echo "${{ github.repository }}" | cut -d '/' -f 2 | tr '[:upper:]' '[:lower:]')
+
+          # Build appropriate API URL based on if owner is org or user
+          if [[ "${{ steps.repo_owner_type.outputs.is_org }}" == "true" ]]; then
+            API_URL="https://api.github.com/orgs/${{ github.repository_owner }}/packages/container/${REPO_NAME}/versions"
+          else
+            API_URL="https://api.github.com/users/${{ github.repository_owner }}/packages/container/${REPO_NAME}/versions"
+          fi
+
+          # Get package versions from GitHub API
+          RESPONSE=$(curl -s \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "$API_URL")
+
+          # Check if version exists in the response
+          if echo "$RESPONSE" | grep -q "\"name\":\"$VERSION\""; then
             echo "✅ Docker image exists in the registry"
             echo "image_exists=true" >> $GITHUB_OUTPUT
           else
-            echo "⚠️ Docker image with version ${{ github.event.inputs.version }} does not exist in the registry. Will build it."
-            echo "image_exists=false" >> $GITHUB_OUTPUT
+            echo "❌ Error: Docker image with version $VERSION does not exist in the registry."
+            echo "When using skip_build=true, the specified version must already exist in the registry."
+            echo "Please build the image first or set skip_build=false to build automatically."
+            exit 1
           fi
 
       # Set need_build flag for later steps
-      - name: Determine if build is needed
+      - name: Set need_build flag
         id: build_needed
         run: |
           if [[ "${{ github.event_name }}" == "push" ]]; then
@@ -76,55 +147,99 @@ jobs:
             echo "need_build=false" >> $GITHUB_OUTPUT
           fi
 
+      # Set version for manual deployments that skip build and have existing image
+      - name: Set version for manual deployment
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.skip_build == 'true' && steps.check_image.outputs.image_exists == 'true' }}
+        id: manual_version
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          VERSION="${VERSION#v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+  semantic_release:
+    # Generate a new semantic release only if:
+    # - We need to build a new image (not using existing one)
+    name: Generate Semantic Release
+    needs: prepare
+    if: ${{ needs.prepare.outputs.need_build == 'true' }}
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 15 # Add timeout to prevent hanging jobs
+    outputs:
+      new_release_published: ${{ steps.semantic.outputs.new_release_published }}
+      new_release_version: ${{ steps.semantic.outputs.new_release_version }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version-file: ".nvmrc"
-          cache: "npm"
+          cache: "npm" # Enable built-in npm caching
 
       - name: Install dependencies
         run: npm ci
 
-      # Only run semantic release for automated deployments or manual deployments that need build
       - name: Create semantic release
         id: semantic
-        if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && steps.build_needed.outputs.need_build == 'true') }}
         uses: cycjimmy/semantic-release-action@v4
         with:
           semantic_version: 24.2.3
+          # Specify branch explicitly
+          branches: |
+            [
+              'main'
+            ]
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Set version for manual deployments that skip build and have existing image
-      - name: Set manual version
-        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.skip_build == 'true' && steps.check_image.outputs.image_exists == 'true' }}
-        id: manual_version
-        run: echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+      - name: Set summary
+        if: ${{ steps.semantic.outputs.new_release_published == 'true' }}
+        run: |
+          echo "## Semantic Release" >> $GITHUB_STEP_SUMMARY
+          echo "✅ New version published: ${{ steps.semantic.outputs.new_release_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "Release notes: https://github.com/${{ github.repository }}/releases/tag/v${{ steps.semantic.outputs.new_release_version }}" >> $GITHUB_STEP_SUMMARY
 
-      # Set version for manual deployments that skip build but need to build (image doesn't exist)
-      - name: Set version for missing image
-        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.skip_build == 'true' && steps.check_image.outputs.image_exists == 'false' }}
-        id: missing_image_version
-        run: echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+  build:
+    # Build and push Docker image only if:
+    # - We need to build a new image (not using existing one)
+    # AND:
+    # - We successfully published a new semantic release
+    name: Build Docker Image
+    needs: [prepare, semantic_release]
+    if: ${{ needs.prepare.outputs.need_build == 'true' && needs.semantic_release.outputs.new_release_published == 'true' }}
+    permissions:
+      packages: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 30 # Add timeout for build job
+    outputs:
+      version: ${{ needs.semantic_release.outputs.new_release_version }}
 
-      # BUILD DOCKER IMAGE (BEFORE DATABASE MIGRATIONS)
-      # ---------------------------------------------
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1 # Only fetch the latest commit for faster checkout
 
       # Set up QEMU for multi-arch builds
       - name: Set up QEMU
-        if: ${{ steps.build_needed.outputs.need_build == 'true' }}
         uses: docker/setup-qemu-action@v2
         with:
           platforms: "linux/amd64,linux/arm64"
 
       # Set up Docker Buildx
       - name: Set up Docker Buildx
-        if: ${{ steps.build_needed.outputs.need_build == 'true' }}
         uses: docker/setup-buildx-action@v3
 
       # Login to GitHub Container Registry
       - name: Login to GitHub Container Registry
-        if: ${{ steps.build_needed.outputs.need_build == 'true' }}
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -133,21 +248,16 @@ jobs:
 
       # Extract metadata and set tags
       - name: Extract metadata
-        if: ${{ steps.build_needed.outputs.need_build == 'true' }}
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}
           tags: |
             type=raw,value=latest
-            ${{ (github.event_name == 'push' && format('type=raw,value={0}', steps.semantic.outputs.new_release_version)) ||
-               (github.event_name == 'workflow_dispatch' && steps.build_needed.outputs.need_build == 'true' &&
-                steps.check_image.outputs.image_exists == 'false' && format('type=raw,value={0}', github.event.inputs.version)) ||
-               format('type=raw,value={0}', steps.semantic.outputs.new_release_version) }}
+            type=raw,value=${{ needs.semantic_release.outputs.new_release_version }}
 
       # Build and push the Docker image
-      - name: Build and push Docker image to GCR
-        if: ${{ steps.build_needed.outputs.need_build == 'true' }}
+      - name: Build and push Docker image to GHCR
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -158,46 +268,110 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # DATABASE MIGRATIONS (AFTER DOCKER BUILD)
-      # ---------------------------------------
+      # Add build summary
+      - name: Set build summary
+        run: |
+          echo "## Docker Build" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Successfully built and pushed image with tags:" >> $GITHUB_STEP_SUMMARY
+          echo "- ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:latest" >> $GITHUB_STEP_SUMMARY
+          echo "- ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}:${{ needs.semantic_release.outputs.new_release_version }}" >> $GITHUB_STEP_SUMMARY
 
-      # Combined condition for database migrations
-      - name: Generate database migrations
-        if: ${{ (github.event_name == 'push' && steps.semantic.outputs.new_release_published == 'true') || (github.event_name == 'workflow_dispatch' && github.event.inputs.skip_migrations != 'true') }}
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          SKIP_ENV_VALIDATION: "true"
-        run: npx drizzle-kit generate --config=drizzle.config.ts
+  migrations:
+    # Run only if migrations aren't explicitly skipped
+    # AND EITHER:
+    # We're using an existing image (not building)
+    # OR we successfully built a new image with a new semantic version
+    name: Run Database Migrations
+    needs: [prepare, semantic_release, build]
+    if: ${{ always() &&
+      github.event.inputs.skip_migrations != 'true' &&
+      ((needs.prepare.outputs.need_build == 'false') ||
+      (needs.semantic_release.outputs.new_release_published == 'true' && needs.build.result == 'success')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15 # Add timeout for migrations
+    environment: ${{ needs.prepare.outputs.environment }}
 
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1 # Only fetch the latest commit for faster checkout
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: "npm" # Enable built-in npm caching
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Run database migrations using environment-specific secrets
+      # Only apply existing migrations, no need to generate new ones
       - name: Apply database migrations
-        if: ${{ (github.event_name == 'push' && steps.semantic.outputs.new_release_published == 'true') || (github.event_name == 'workflow_dispatch' && github.event.inputs.skip_migrations != 'true') }}
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           SKIP_ENV_VALIDATION: "true"
         run: npx drizzle-kit migrate --config=drizzle.config.ts
 
-      # DEPLOYMENT
-      # ----------
+      # Add migrations summary
+      - name: Set migrations summary
+        run: |
+          echo "## Database Migrations" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Successfully applied database migrations to ${{ needs.prepare.outputs.environment }} environment" >> $GITHUB_STEP_SUMMARY
 
-      # Version to use for deployment
-      - name: Set deployment version
+  deploy:
+    # Deploy to Coolify only if:
+    # - Migrations are successful or skipped
+    # - We're in production environment (no need to deploy to staging as PR previews are automatic)
+    # AND EITHER:
+    # We're using an existing image (not building)
+    # OR we successfully built a new image with a published semantic version
+    name: Deploy to Coolify
+    needs: [prepare, semantic_release, build, migrations]
+    if: ${{ always() &&
+      needs.prepare.outputs.environment == 'production' &&
+      (needs.migrations.result == 'success' || needs.migrations.result == 'skipped') &&
+      (needs.prepare.outputs.need_build == 'false' ||
+      (needs.build.result == 'success' && needs.semantic_release.outputs.new_release_published == 'true')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10 # Add timeout for deployment
+    environment: production
+
+    steps:
+      - name: Determine deployment version
         id: deployment_version
         run: |
-          if [[ "${{ github.event_name }}" == "push" ]]; then
-            echo "version=${{ steps.semantic.outputs.new_release_version }}" >> $GITHUB_OUTPUT
-          elif [[ "${{ github.event.inputs.skip_build }}" == "true" && "${{ steps.check_image.outputs.image_exists }}" == "true" ]]; then
-            echo "version=${{ steps.manual_version.outputs.version }}" >> $GITHUB_OUTPUT
-          elif [[ "${{ github.event.inputs.skip_build }}" == "true" && "${{ steps.check_image.outputs.image_exists }}" == "false" ]]; then
-            echo "version=${{ steps.missing_image_version.outputs.version }}" >> $GITHUB_OUTPUT
+          if [[ "${{ needs.prepare.outputs.need_build }}" == "false" ]]; then
+            echo "version=${{ needs.prepare.outputs.manual_version }}" >> $GITHUB_OUTPUT
           else
-            echo "version=${{ steps.semantic.outputs.new_release_version }}" >> $GITHUB_OUTPUT
+            echo "version=${{ needs.semantic_release.outputs.new_release_version }}" >> $GITHUB_OUTPUT
           fi
 
-      # Trigger deployment for both types
+      # Trigger deployment
       - name: Trigger deployment to Coolify
-        if: ${{ (github.event_name == 'push' && steps.semantic.outputs.new_release_published == 'true') || github.event_name == 'workflow_dispatch' }}
+        id: coolify_deploy
         run: |
           echo "Deploying version ${{ steps.deployment_version.outputs.version }}"
-          curl -X POST "${{ secrets.COOLIFY_WEBHOOK_URL }}" \
+
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "${{ secrets.COOLIFY_WEBHOOK_URL }}" \
             -H "Content-Type: application/json" \
-            -H "Authorization: Bearer ${{ secrets.COOLIFY_API_TOKEN }}"
+            -H "Authorization: Bearer ${{ secrets.COOLIFY_API_TOKEN }}")
+
+          HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+
+          if [[ "$HTTP_STATUS" == "2"* ]]; then
+            echo "✅ Coolify deployment triggered successfully"
+          else
+            echo "❌ Failed to trigger Coolify deployment. Status code: $HTTP_STATUS"
+            echo "Response body: $BODY"
+            exit 1
+          fi
+
+      # Add deployment summary
+      - name: Set deploy summary
+        run: |
+          echo "## Production Deployment" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Successfully deployed version ${{ steps.deployment_version.outputs.version }} to Coolify" >> $GITHUB_STEP_SUMMARY
+          echo "Deployment time: $(date)" >> $GITHUB_STEP_SUMMARY
