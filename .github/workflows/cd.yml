@@ -4,6 +4,22 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      skip_build:
+        description: "Skip build and deploy existing version"
+        required: true
+        type: boolean
+        default: false
+      version:
+        description: "Version to deploy (required if skip_build=true)"
+        required: false
+        default: ""
+      skip_migrations:
+        description: "Skip database migrations"
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   CD:
@@ -20,10 +36,12 @@ jobs:
         with:
           fetch-depth: 0 # Fetch all history for all tags and branches to ensure semantic release can determine the correct version number
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
-        with:
-          platforms: "linux/amd64,linux/arm64"
+      # Validation step for manual deployments
+      - name: Validate inputs
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.skip_build == 'true' && github.event.inputs.version == '' }}
+        run: |
+          echo "Error: You must provide a version when skip_build is set to true"
+          exit 1
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -34,34 +52,50 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Only run semantic release for automated deployments or manual deployments where skip_build=false
       - name: Create semantic release
         id: semantic
+        if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.skip_build == 'false') }}
         uses: cycjimmy/semantic-release-action@v4
         with:
           semantic_version: 24.2.3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # Set version for manual deployments that skip build
+      - name: Set manual version
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.skip_build == 'true' }}
+        id: manual_version
+        run: echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+
+      # Combined condition for database migrations
       - name: Generate database migrations
-        if: steps.semantic.outputs.new_release_published == 'true'
+        if: ${{ (github.event_name == 'push' && steps.semantic.outputs.new_release_published == 'true') || (github.event_name == 'workflow_dispatch' && github.event.inputs.skip_migrations != 'true') }}
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           SKIP_ENV_VALIDATION: "true"
         run: npx drizzle-kit generate --config=drizzle.config.ts
 
       - name: Apply database migrations
-        if: steps.semantic.outputs.new_release_published == 'true'
+        if: ${{ (github.event_name == 'push' && steps.semantic.outputs.new_release_published == 'true') || (github.event_name == 'workflow_dispatch' && github.event.inputs.skip_migrations != 'true') }}
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           SKIP_ENV_VALIDATION: "true"
         run: npx drizzle-kit migrate --config=drizzle.config.ts
 
+      # Skip build steps if requested for manual deployments
+      - name: Set up QEMU
+        if: ${{ (github.event_name == 'push' && steps.semantic.outputs.new_release_published == 'true') || (github.event_name == 'workflow_dispatch' && github.event.inputs.skip_build == 'false') }}
+        uses: docker/setup-qemu-action@v2
+        with:
+          platforms: "linux/amd64,linux/arm64"
+
       - name: Set up Docker Buildx
-        if: steps.semantic.outputs.new_release_published == 'true'
+        if: ${{ (github.event_name == 'push' && steps.semantic.outputs.new_release_published == 'true') || (github.event_name == 'workflow_dispatch' && github.event.inputs.skip_build == 'false') }}
         uses: docker/setup-buildx-action@v3
 
       - name: Login to GitHub Container Registry
-        if: steps.semantic.outputs.new_release_published == 'true'
+        if: ${{ (github.event_name == 'push' && steps.semantic.outputs.new_release_published == 'true') || (github.event_name == 'workflow_dispatch' && github.event.inputs.skip_build == 'false') }}
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -69,17 +103,17 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract metadata
-        if: steps.semantic.outputs.new_release_published == 'true'
+        if: ${{ (github.event_name == 'push' && steps.semantic.outputs.new_release_published == 'true') || (github.event_name == 'workflow_dispatch' && github.event.inputs.skip_build == 'false') }}
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}
           tags: |
             type=raw,value=latest
-            type=raw,value=${{ steps.semantic.outputs.new_release_version }}
+            ${{ github.event_name == 'push' && format('type=raw,value={0}', steps.semantic.outputs.new_release_version) || (github.event_name == 'workflow_dispatch' && github.event.inputs.skip_build == 'false' && format('type=raw,value={0}', steps.semantic.outputs.new_release_version)) }}
 
       - name: Build and push Docker image to GCR
-        if: steps.semantic.outputs.new_release_published == 'true'
+        if: ${{ (github.event_name == 'push' && steps.semantic.outputs.new_release_published == 'true') || (github.event_name == 'workflow_dispatch' && github.event.inputs.skip_build == 'false') }}
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -90,9 +124,23 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Trigger deployment to Coolify
-        if: steps.semantic.outputs.new_release_published == 'true'
+      # Version to use for deployment
+      - name: Set deployment version
+        id: deployment_version
         run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            echo "version=${{ steps.semantic.outputs.new_release_version }}" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.event.inputs.skip_build }}" == "true" ]]; then
+            echo "version=${{ steps.manual_version.outputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${{ steps.semantic.outputs.new_release_version }}" >> $GITHUB_OUTPUT
+          fi
+
+      # Trigger deployment for both types
+      - name: Trigger deployment to Coolify
+        if: ${{ (github.event_name == 'push' && steps.semantic.outputs.new_release_published == 'true') || github.event_name == 'workflow_dispatch' }}
+        run: |
+          echo "Deploying version ${{ steps.deployment_version.outputs.version }}"
           curl -X POST "${{ secrets.COOLIFY_WEBHOOK_URL }}" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${{ secrets.COOLIFY_API_TOKEN }}"
