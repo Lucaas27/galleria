@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/Lucaas27/galleria/compare/v0.5.0...v0.6.0) (2025-04-19)
+
+### Features
+
+* enhance CD workflow with manual deployment options ([#5](https://github.com/Lucaas27/galleria/issues/5)) ([022da01](https://github.com/Lucaas27/galleria/commit/022da01469e0f5f1c0bcb56c8d6987338ba95f40))
+* enhance CD workflow with manual deployment options and input validation ([e034fae](https://github.com/Lucaas27/galleria/commit/e034fae17012141be608ad7f5b2d88b45ed31c85))
+
 ## [0.5.0](https://github.com/Lucaas27/galleria/compare/v0.4.0...v0.5.0) (2025-04-18)
 
 ### Features
