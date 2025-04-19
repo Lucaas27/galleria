@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.7.0](https://github.com/Lucaas27/galleria/compare/v0.6.0...v0.7.0) (2025-04-19)
+
+### Features
+
+* add image existence check and conditional build logic ([#6](https://github.com/Lucaas27/galleria/issues/6)) ([ec18962](https://github.com/Lucaas27/galleria/commit/ec189621d14df164e23e2b349aec3b383cdcebca))
+* add image existence check and conditional build logic for manual deployments ([5dce117](https://github.com/Lucaas27/galleria/commit/5dce11738d2a9d71299b1ff88272af23f8af0e60))
+
+### Bug Fixes
+
+* simplify Docker image tag logic in CD workflow ([20e7cf2](https://github.com/Lucaas27/galleria/commit/20e7cf220f8127613803cc895185da19b6cbff54))
+
 ## [0.6.0](https://github.com/Lucaas27/galleria/compare/v0.5.0...v0.6.0) (2025-04-19)
 
 ### Features
