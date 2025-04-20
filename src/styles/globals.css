@@ -15,12 +15,16 @@
 @layer components {
   .bg-radial-gradient {
     @apply relative h-full w-full bg-slate-900;
-    @apply before:bg-[radial-gradient(circle_500px_at_50%,_#3e3e3e,_transparent)];
+    @apply before:bg-[radial-gradient(circle_500px_at_50%_700px,_#3e3e3e,_transparent)];
     @apply before:absolute before:top-0 before:right-0 before:bottom-0 before:left-0;
     @apply before:content-[""];
     @apply before:rounded-[inherit];
     @apply before:backdrop-blur-[inherit];
     @apply before:z-[-1]; /* Add negative z-index to place gradient behind content */
     @apply before:pointer-events-none; /* Ensure the pseudo-element doesn't intercept pointer events */
+  }
+
+  .logo-text {
+    @apply bg-gradient-to-r from-teal-400 via-cyan-300 to-sky-400 bg-clip-text text-transparent;
   }
 }
